@@ -1,11 +1,26 @@
 #!/bin/sh
-set -e
+# Deliberately no "set -e" here — every step below is written to survive
+# a failure on its own, rather than letting one hiccup crash the whole
+# container. That matters a lot on free-tier databases like Neon, which
+# suspend when idle: the very first connection attempt after a period of
+# sleep can legitimately fail or time out while the database wakes back
+# up, and we don't want that to take the whole app down with it.
 
 echo "Syncing database schema..."
-npx prisma db push --accept-data-loss --skip-generate
+attempt=1
+max_attempts=5
+until npx prisma db push --accept-data-loss --skip-generate; do
+  if [ "$attempt" -ge "$max_attempts" ]; then
+    echo "Schema sync did not succeed after $max_attempts attempts — starting the server anyway."
+    break
+  fi
+  echo "Schema sync attempt $attempt failed (database may still be waking up) — retrying in 5s..."
+  attempt=$((attempt + 1))
+  sleep 5
+done
 
 echo "Checking sample data..."
-npx tsx prisma/seed-if-empty.ts
+npx tsx prisma/seed-if-empty.ts || echo "Sample data check failed — continuing anyway."
 
 echo "Starting server..."
 exec node server.js
