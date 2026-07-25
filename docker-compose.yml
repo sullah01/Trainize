@@ -1,0 +1,50 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: trainize
+      POSTGRES_PASSWORD: trainize
+      POSTGRES_DB: trainize
+    volumes:
+      - trainize_db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trainize"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build:
+      context: .
+      target: builder
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://trainize:trainize@db:5432/trainize?schema=public
+      DIRECT_URL: postgresql://trainize:trainize@db:5432/trainize?schema=public
+    entrypoint: ["sh", "-c", "npx prisma db push --accept-data-loss && npx tsx prisma/seed.ts"]
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgresql://trainize:trainize@db:5432/trainize?schema=public
+      DIRECT_URL: postgresql://trainize:trainize@db:5432/trainize?schema=public
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-dev-secret-change-me}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+    ports:
+      - "3000:3000"
+
+volumes:
+  trainize_db_data:
