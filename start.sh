@@ -34,4 +34,19 @@ if [ -z "$NEXTAUTH_URL" ]; then
 fi
 
 echo "Starting server..."
-exec node server.js
+node server.js &
+NODE_PID=$!
+
+# Directly answer the question Render support asked: is the server actually
+# reachable on its own port from inside the container? Give it a moment to
+# bind, then curl ourselves and print the result into the logs.
+sleep 3
+echo "Self-check: curling http://127.0.0.1:${PORT:-3000}/api/health from inside the container..."
+if curl -sf "http://127.0.0.1:${PORT:-3000}/api/health"; then
+  echo ""
+  echo "Self-check PASSED — the server is reachable on its own port from inside the container."
+else
+  echo "Self-check FAILED — the server is NOT reachable on http://127.0.0.1:${PORT:-3000} even from inside its own container."
+fi
+
+wait $NODE_PID
