@@ -22,5 +22,16 @@ done
 echo "Checking sample data..."
 npx tsx prisma/seed-if-empty.ts || echo "Sample data check failed — continuing anyway."
 
+# NEXTAUTH_URL is required — if it's unset or empty, NextAuth crashes every
+# page on startup with "Invalid URL". Rather than rely on remembering to set
+# it by hand every time (including after recreating the service), fall back
+# to Render's own automatically-provided RENDER_EXTERNAL_URL, and only fall
+# back further to localhost if neither is available (e.g. local Docker,
+# where docker-compose already sets NEXTAUTH_URL explicitly anyway).
+if [ -z "$NEXTAUTH_URL" ]; then
+  export NEXTAUTH_URL="${RENDER_EXTERNAL_URL:-http://localhost:3000}"
+  echo "NEXTAUTH_URL was not set — defaulting to $NEXTAUTH_URL"
+fi
+
 echo "Starting server..."
 exec node server.js
